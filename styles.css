@@ -408,6 +408,19 @@ input[type="file"] {
     }
 }
 
-.fade-in {
-    animation: fadeIn 0.5s ease;
+.btn-success {
+    background-color: #48bb78;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #38a169;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+}
+
+.export-section {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
 }
