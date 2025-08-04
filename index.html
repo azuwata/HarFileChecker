@@ -9,7 +9,7 @@
 <body>
     <div class="header">
         <h1>HARタグチェッカー</h1>
-        <p>HARファイル内のタグ発火状況チェック用ツール</p>
+        <p>HARファイル内のタグ発火状況を詳細に分析</p>
     </div>
     
     <div class="container">
@@ -55,6 +55,16 @@
         <div class="card" id="resultsSection" style="display: none;">
             <h2 class="section-title">チェック結果</h2>
             <div class="summary" id="summary"></div>
+            <div class="export-section">
+                <button class="btn btn-success" onclick="exportToCSV()">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    CSV出力
+                </button>
+            </div>
             <div id="results" style="margin-top: 30px;"></div>
         </div>
     </div>
