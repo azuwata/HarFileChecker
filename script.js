@@ -1,4 +1,5 @@
 let harData = null;
+let lastResults = null; // CSV出力用に結果を保存
 
 // File upload handlers
 const uploadArea = document.getElementById('uploadArea');
@@ -96,6 +97,7 @@ function checkTags() {
     }
 
     const results = analyzeTags(harData, tags);
+    lastResults = results; // 結果を保存
     displayResults(results, tags);
 }
 
@@ -143,7 +145,9 @@ function analyzeTags(har, tags) {
                     method: entry.request.method,
                     status: entry.response.status,
                     foundParams: foundParams,
-                    timestamp: new Date(entry.startedDateTime).toLocaleString()
+                    timestamp: new Date(entry.startedDateTime).toLocaleString(),
+                    postData: entry.request.postData ? entry.request.postData.text : null,
+                    headers: entry.request.headers
                 });
             }
         });
@@ -259,4 +263,93 @@ function displayResults(results, tags) {
 
     resultsSection.style.display = 'block';
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// CSV出力機能
+function exportToCSV() {
+    if (!lastResults) {
+        alert('エクスポートする結果がありません。');
+        return;
+    }
+
+    // CSVヘッダー
+    const headers = ['番号', 'フィルタ文字', 'リクエストURL', 'メソッド', 'ステータス', 'タイムスタンプ', 'パラメータ', 'ペイロードソース'];
+    const rows = [headers];
+
+    let rowNumber = 1;
+
+    // 各タグの結果をCSV行に変換
+    Object.entries(lastResults).forEach(([tag, entries]) => {
+        entries.forEach(entry => {
+            // パラメータを文字列に変換
+            const params = entry.foundParams.length > 0 
+                ? entry.foundParams.map(p => `${p.name}=${p.value}`).join('; ')
+                : '';
+
+            // ペイロードソースの取得
+            let payloadSource = '';
+            if (entry.postData) {
+                // POSTデータの最初の100文字を取得（長すぎる場合は省略）
+                payloadSource = entry.postData.length > 100 
+                    ? entry.postData.substring(0, 100) + '...'
+                    : entry.postData;
+                // 改行を空白に置換
+                payloadSource = payloadSource.replace(/[\r\n]+/g, ' ');
+            }
+
+            const row = [
+                rowNumber++,
+                tag,
+                entry.url,
+                entry.method,
+                entry.status,
+                entry.timestamp,
+                params,
+                payloadSource
+            ];
+
+            rows.push(row);
+        });
+    });
+
+    // CSV文字列を生成
+    const csvContent = rows.map(row => 
+        row.map(cell => {
+            // セル内にカンマ、改行、ダブルクォートが含まれる場合の処理
+            const cellStr = String(cell);
+            if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
+                return `"${cellStr.replace(/"/g, '""')}"`;
+            }
+            return cellStr;
+        }).join(',')
+    ).join('\n');
+
+    // BOMを追加（Excelで開いた時の文字化け対策）
+    const bom = '\uFEFF';
+    const csvWithBom = bom + csvContent;
+
+    // Blobを作成してダウンロード
+    const blob = new Blob([csvWithBom], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    // ファイル名に現在の日時を含める
+    const now = new Date();
+    const dateStr = now.getFullYear() + 
+                   ('0' + (now.getMonth() + 1)).slice(-2) + 
+                   ('0' + now.getDate()).slice(-2) + 
+                   '_' +
+                   ('0' + now.getHours()).slice(-2) + 
+                   ('0' + now.getMinutes()).slice(-2);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `har_tag_check_${dateStr}.csv`);
+    link.style.display = 'none';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // メモリ解放
+    URL.revokeObjectURL(url);
 }
