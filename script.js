@@ -116,6 +116,15 @@ function analyzeTags(har, tags) {
             // スペースで分割してAND検索のキーワードを取得
             const keywords = tag.trim().split(/\s+/).filter(k => k.length > 0);
             
+            // デバッグ用：最初の数件のリクエストをコンソールに出力
+            if (entry.request.url.includes('yahoo') || entry.request.url.includes('yimg')) {
+                console.log('Yahoo関連リクエスト:', {
+                    url: url,
+                    queryParams: queryString,
+                    postData: postText
+                });
+            }
+            
             // キーワードが1つの場合は従来の検索
             if (keywords.length === 1) {
                 const keyword = keywords[0];
@@ -169,9 +178,21 @@ function analyzeTags(har, tags) {
                     fullText += postText;
                 }
                 
-                // すべてのキーワードが含まれているかチェック
+                // ヘッダーも検索対象に追加（Cookie等に含まれる可能性）
+                if (entry.request.headers) {
+                    entry.request.headers.forEach(header => {
+                        fullText += `${header.name}=${header.value}\n`;
+                    });
+                }
+                
+                // レスポンスボディも確認（ピクセルタグの場合）
+                if (entry.response && entry.response.content && entry.response.content.text) {
+                    fullText += entry.response.content.text;
+                }
+                
+                // すべてのキーワードが含まれているかチェック（大文字小文字を無視）
                 const allKeywordsFound = keywords.every(keyword => 
-                    fullText.includes(keyword)
+                    fullText.toLowerCase().includes(keyword.toLowerCase())
                 );
                 
                 if (allKeywordsFound) {
@@ -180,7 +201,7 @@ function analyzeTags(har, tags) {
                     queryString.forEach(param => {
                         const paramStr = `${param.name}=${param.value}`;
                         // パラメータにいずれかのキーワードが含まれている場合
-                        if (keywords.some(keyword => paramStr.includes(keyword))) {
+                        if (keywords.some(keyword => paramStr.toLowerCase().includes(keyword.toLowerCase()))) {
                             foundParams.push({
                                 name: param.name,
                                 value: param.value
