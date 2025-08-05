@@ -116,46 +116,88 @@ function analyzeTags(har, tags) {
             // スペースで分割してAND検索のキーワードを取得
             const keywords = tag.trim().split(/\s+/).filter(k => k.length > 0);
             
-            // 検索対象のテキストを結合
-            const searchTarget = url + ' ' + 
-                queryString.map(p => `${p.name}=${p.value}`).join(' ') + ' ' + 
-                postText;
-            
-            // すべてのキーワードが含まれているかチェック
-            const allKeywordsFound = keywords.every(keyword => 
-                searchTarget.includes(keyword)
-            );
-            
-            if (allKeywordsFound) {
+            // キーワードが1つの場合は従来の検索
+            if (keywords.length === 1) {
+                const keyword = keywords[0];
+                let found = false;
                 const foundParams = [];
-                
-                // どのパラメータにキーワードが含まれているか記録
+
+                // Check URL
+                if (url.includes(keyword)) {
+                    found = true;
+                }
+
+                // Check query parameters
                 queryString.forEach(param => {
-                    const paramText = `${param.name}=${param.value}`;
-                    if (keywords.every(keyword => 
-                        url.includes(keyword) || 
-                        paramText.includes(keyword) || 
-                        postText.includes(keyword)
-                    )) {
+                    if (param.name.includes(keyword) || param.value.includes(keyword)) {
+                        found = true;
+                        foundParams.push({
+                            name: param.name,
+                            value: param.value
+                        });
+                    }
+                });
+
+                // Check POST data
+                if (postText.includes(keyword)) {
+                    found = true;
+                }
+
+                if (found) {
+                    results[tag].push({
+                        url: url,
+                        method: entry.request.method,
+                        status: entry.response.status,
+                        foundParams: foundParams,
+                        timestamp: new Date(entry.startedDateTime).toLocaleString(),
+                        postData: entry.request.postData ? entry.request.postData.text : null,
+                        headers: entry.request.headers
+                    });
+                }
+            } else {
+                // 複数キーワードの場合はAND検索
+                // 各リクエストの全テキストを結合
+                let fullText = url + '\n';
+                
+                // クエリパラメータを追加
+                queryString.forEach(param => {
+                    fullText += `${param.name}=${param.value}\n`;
+                });
+                
+                // POSTデータを追加
+                if (postText) {
+                    fullText += postText;
+                }
+                
+                // すべてのキーワードが含まれているかチェック
+                const allKeywordsFound = keywords.every(keyword => 
+                    fullText.includes(keyword)
+                );
+                
+                if (allKeywordsFound) {
+                    // マッチしたパラメータを特定
+                    const foundParams = [];
+                    queryString.forEach(param => {
+                        const paramStr = `${param.name}=${param.value}`;
                         // パラメータにいずれかのキーワードが含まれている場合
-                        if (keywords.some(keyword => paramText.includes(keyword))) {
+                        if (keywords.some(keyword => paramStr.includes(keyword))) {
                             foundParams.push({
                                 name: param.name,
                                 value: param.value
                             });
                         }
-                    }
-                });
-                
-                results[tag].push({
-                    url: url,
-                    method: entry.request.method,
-                    status: entry.response.status,
-                    foundParams: foundParams,
-                    timestamp: new Date(entry.startedDateTime).toLocaleString(),
-                    postData: entry.request.postData ? entry.request.postData.text : null,
-                    headers: entry.request.headers
-                });
+                    });
+                    
+                    results[tag].push({
+                        url: url,
+                        method: entry.request.method,
+                        status: entry.response.status,
+                        foundParams: foundParams,
+                        timestamp: new Date(entry.startedDateTime).toLocaleString(),
+                        postData: entry.request.postData ? entry.request.postData.text : null,
+                        headers: entry.request.headers
+                    });
+                }
             }
         });
     });
