@@ -64,7 +64,7 @@ function addTagInput() {
     const newRow = document.createElement('div');
     newRow.className = 'tag-input-row fade-in';
     newRow.innerHTML = `
-        <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX">
+        <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX (スペースでAND検索)">
         <button class="btn btn-danger" onclick="removeTagInput(this)">削除</button>
     `;
     tagInputs.appendChild(newRow);
@@ -110,36 +110,43 @@ function analyzeTags(har, tags) {
     har.log.entries.forEach(entry => {
         const url = entry.request.url;
         const queryString = entry.request.queryString || [];
+        const postText = entry.request.postData ? entry.request.postData.text : '';
         
         tags.forEach(tag => {
-            let found = false;
-            const foundParams = [];
-
-            // Check URL
-            if (url.includes(tag)) {
-                found = true;
-            }
-
-            // Check query parameters
-            queryString.forEach(param => {
-                if (param.name.includes(tag) || param.value.includes(tag)) {
-                    found = true;
-                    foundParams.push({
-                        name: param.name,
-                        value: param.value
-                    });
-                }
-            });
-
-            // Check POST data
-            if (entry.request.postData && entry.request.postData.text) {
-                const postText = entry.request.postData.text;
-                if (postText.includes(tag)) {
-                    found = true;
-                }
-            }
-
-            if (found) {
+            // スペースで分割してAND検索のキーワードを取得
+            const keywords = tag.trim().split(/\s+/).filter(k => k.length > 0);
+            
+            // 検索対象のテキストを結合
+            const searchTarget = url + ' ' + 
+                queryString.map(p => `${p.name}=${p.value}`).join(' ') + ' ' + 
+                postText;
+            
+            // すべてのキーワードが含まれているかチェック
+            const allKeywordsFound = keywords.every(keyword => 
+                searchTarget.includes(keyword)
+            );
+            
+            if (allKeywordsFound) {
+                const foundParams = [];
+                
+                // どのパラメータにキーワードが含まれているか記録
+                queryString.forEach(param => {
+                    const paramText = `${param.name}=${param.value}`;
+                    if (keywords.every(keyword => 
+                        url.includes(keyword) || 
+                        paramText.includes(keyword) || 
+                        postText.includes(keyword)
+                    )) {
+                        // パラメータにいずれかのキーワードが含まれている場合
+                        if (keywords.some(keyword => paramText.includes(keyword))) {
+                            foundParams.push({
+                                name: param.name,
+                                value: param.value
+                            });
+                        }
+                    }
+                });
+                
                 results[tag].push({
                     url: url,
                     method: entry.request.method,

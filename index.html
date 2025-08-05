@@ -28,9 +28,12 @@
 
         <div class="card">
             <h2 class="section-title">チェックするタグ</h2>
+            <p style="font-size: 14px; color: #718096; margin-bottom: 15px;">
+                ※ スペースで区切ると、すべてのキーワードを含むリクエストのみを検索します（AND検索）
+            </p>
             <div class="tag-inputs" id="tagInputs">
                 <div class="tag-input-row">
-                    <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX">
+                    <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX (スペースでAND検索)">
                     <button class="btn btn-danger" onclick="removeTagInput(this)">削除</button>
                 </div>
             </div>
