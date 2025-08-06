@@ -301,8 +301,28 @@ input[type="file"] {
 }
 
 .tag-details.show {
-    max-height: 1000px;
+    max-height: 600px;
     padding: 20px;
+    overflow-y: auto;
+}
+
+/* スクロールバーのスタイリング */
+.tag-details.show::-webkit-scrollbar {
+    width: 8px;
+}
+
+.tag-details.show::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.tag-details.show::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.tag-details.show::-webkit-scrollbar-thumb:hover {
+    background: #a0a0a0;
 }
 
 .request-item {
