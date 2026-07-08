@@ -1,5 +1,17 @@
 let harData = null;
 let lastResults = null; // CSV出力用に結果を保存
+const DEBUG = false; // デバッグログを制御
+
+// HTMLを表示する際に安全にするための簡易エスケープ
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 // File upload handlers
 const uploadArea = document.getElementById('uploadArea');
@@ -32,7 +44,7 @@ fileInput.addEventListener('change', (e) => {
 });
 
 function handleFile(file) {
-    if (!file.name.endsWith('.har')) {
+    if (!file.name || !file.name.toLowerCase().endsWith('.har')) {
         alert('HARファイルを選択してください。');
         return;
     }
@@ -41,15 +53,19 @@ function handleFile(file) {
     reader.onload = (e) => {
         try {
             harData = JSON.parse(e.target.result);
+            // HAR 構造の簡易検証
+            if (!harData || !harData.log || !Array.isArray(harData.log.entries)) {
+                alert('HAR形式が不正です。');
+                harData = null;
+                return;
+            }
+
+            // 表示部分は既存の要素のテキストを差し替えて安全に更新する
             uploadArea.classList.add('uploaded');
-            uploadArea.innerHTML = `
-                <div class="uploaded-file">
-                    <svg width="24" height="24" viewBox="0 0 24 24" class="icon-check">
-                        <path d="M20 6L9 17l-5-5"></path>
-                    </svg>
-                    <span>${file.name}</span>
-                </div>
-            `;
+            const uploadText = uploadArea.querySelector('.upload-text');
+            const uploadSub = uploadArea.querySelector('.upload-subtext');
+            if (uploadText) uploadText.textContent = file.name;
+            if (uploadSub) uploadSub.textContent = '';
         } catch (error) {
             alert('HARファイルの解析に失敗しました。');
             console.error(error);
@@ -63,10 +79,20 @@ function addTagInput() {
     const tagInputs = document.getElementById('tagInputs');
     const newRow = document.createElement('div');
     newRow.className = 'tag-input-row fade-in';
-    newRow.innerHTML = `
-        <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX (スペースでAND検索)">
-        <button class="btn btn-danger" onclick="removeTagInput(this)">削除</button>
-    `;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tag-input';
+    input.placeholder = '例: gtag, fbq, _ga, GTM-XXXXX (スペースでAND検索)';
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-danger';
+    btn.type = 'button';
+    btn.textContent = '削除';
+    btn.addEventListener('click', () => removeTagInput(btn));
+
+    newRow.appendChild(input);
+    newRow.appendChild(btn);
     tagInputs.appendChild(newRow);
 }
 
@@ -106,18 +132,27 @@ function analyzeTags(har, tags) {
     tags.forEach(tag => {
         results[tag] = [];
     });
+    // HARの構造が期待通りか確認
+    if (!har || !har.log || !Array.isArray(har.log.entries)) {
+        return results;
+    }
+
+    // ユーティリティ: 正規化して比較
+    const norm = s => String(s || '').toLowerCase();
 
     har.log.entries.forEach(entry => {
-        const url = entry.request.url;
-        const queryString = entry.request.queryString || [];
-        const postText = entry.request.postData ? entry.request.postData.text : '';
+        const url = entry.request && entry.request.url ? entry.request.url : '';
+        const queryString = entry.request && Array.isArray(entry.request.queryString) ? entry.request.queryString : [];
+        const postText = entry.request && entry.request.postData && entry.request.postData.text ? entry.request.postData.text : '';
+        const headersArr = entry.request && Array.isArray(entry.request.headers) ? entry.request.headers : [];
+        const status = entry.response && typeof entry.response.status !== 'undefined' ? entry.response.status : '';
         
         tags.forEach(tag => {
             // スペースで分割してAND検索のキーワードを取得
             const keywords = tag.trim().split(/\s+/).filter(k => k.length > 0);
             
-            // デバッグ用：最初の数件のリクエストをコンソールに出力
-            if (entry.request.url.includes('yahoo') || entry.request.url.includes('yimg')) {
+            // デバッグ用ログ（DEBUGフラグが有効なときのみ）
+            if (DEBUG && (url.includes('yahoo') || url.includes('yimg'))) {
                 console.log('Yahoo関連リクエスト:', {
                     url: url,
                     queryParams: queryString,
@@ -125,20 +160,21 @@ function analyzeTags(har, tags) {
                 });
             }
             
-            // キーワードが1つの場合は従来の検索
+            // キーワードが1つの場合は従来の検索（大文字小文字を無視）
             if (keywords.length === 1) {
                 const keyword = keywords[0];
+                const nk = norm(keyword);
                 let found = false;
                 const foundParams = [];
 
                 // Check URL
-                if (url.includes(keyword)) {
+                if (norm(url).includes(nk)) {
                     found = true;
                 }
 
                 // Check query parameters
                 queryString.forEach(param => {
-                    if (param.name.includes(keyword) || param.value.includes(keyword)) {
+                    if (norm(param.name).includes(nk) || norm(param.value).includes(nk)) {
                         found = true;
                         foundParams.push({
                             name: param.name,
@@ -148,19 +184,19 @@ function analyzeTags(har, tags) {
                 });
 
                 // Check POST data
-                if (postText.includes(keyword)) {
+                if (norm(postText).includes(nk)) {
                     found = true;
                 }
 
                 if (found) {
                     results[tag].push({
                         url: url,
-                        method: entry.request.method,
-                        status: entry.response.status,
+                        method: entry.request && entry.request.method ? entry.request.method : '',
+                        status: status,
                         foundParams: foundParams,
-                        timestamp: new Date(entry.startedDateTime).toLocaleString(),
-                        postData: entry.request.postData ? entry.request.postData.text : null,
-                        headers: entry.request.headers
+                        timestamp: entry.startedDateTime ? new Date(entry.startedDateTime).toLocaleString() : '',
+                        postData: postText || null,
+                        headers: headersArr
                     });
                 }
             } else {
@@ -191,9 +227,8 @@ function analyzeTags(har, tags) {
                 }
                 
                 // すべてのキーワードが含まれているかチェック（大文字小文字を無視）
-                const allKeywordsFound = keywords.every(keyword => 
-                    fullText.toLowerCase().includes(keyword.toLowerCase())
-                );
+                const lowered = fullText.toLowerCase();
+                const allKeywordsFound = keywords.every(keyword => lowered.includes(keyword.toLowerCase()));
                 
                 if (allKeywordsFound) {
                     // マッチしたパラメータを特定
@@ -211,12 +246,12 @@ function analyzeTags(har, tags) {
                     
                     results[tag].push({
                         url: url,
-                        method: entry.request.method,
-                        status: entry.response.status,
+                        method: entry.request && entry.request.method ? entry.request.method : '',
+                        status: status,
                         foundParams: foundParams,
-                        timestamp: new Date(entry.startedDateTime).toLocaleString(),
-                        postData: entry.request.postData ? entry.request.postData.text : null,
-                        headers: entry.request.headers
+                        timestamp: entry.startedDateTime ? new Date(entry.startedDateTime).toLocaleString() : '',
+                        postData: postText || null,
+                        headers: headersArr
                     });
                 }
             }
@@ -241,20 +276,25 @@ function displayResults(results, tags) {
         }
     });
 
-    summaryDiv.innerHTML = `
-        <div class="summary-item">
-            <p class="summary-value">${tags.length}</p>
-            <p class="summary-label">チェックしたタグ数</p>
-        </div>
-        <div class="summary-item">
-            <p class="summary-value">${foundTags}</p>
-            <p class="summary-label">発火が確認されたタグ</p>
-        </div>
-        <div class="summary-item">
-            <p class="summary-value">${totalFound}</p>
-            <p class="summary-label">総発火回数</p>
-        </div>
-    `;
+    // summary を安全に構築
+    summaryDiv.innerHTML = '';
+    const makeSummaryItem = (value, label) => {
+        const item = document.createElement('div');
+        item.className = 'summary-item';
+        const pv = document.createElement('p');
+        pv.className = 'summary-value';
+        pv.textContent = String(value);
+        const pl = document.createElement('p');
+        pl.className = 'summary-label';
+        pl.textContent = label;
+        item.appendChild(pv);
+        item.appendChild(pl);
+        return item;
+    };
+
+    summaryDiv.appendChild(makeSummaryItem(tags.length, 'チェックしたタグ数'));
+    summaryDiv.appendChild(makeSummaryItem(foundTags, '発火が確認されたタグ'));
+    summaryDiv.appendChild(makeSummaryItem(totalFound, '総発火回数'));
 
     // Display detailed results
     resultsDiv.innerHTML = '';
@@ -270,7 +310,7 @@ function displayResults(results, tags) {
                 <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
-                <span class="tag-name">${tag}</span>
+                <span class="tag-name">${escapeHtml(tag)}</span>
                 <span class="status-badge ${found ? 'status-found' : 'status-not-found'}">
                     ${found ? `${results[tag].length}件発火` : '発火なし'}
                 </span>
@@ -282,13 +322,26 @@ function displayResults(results, tags) {
         
         if (found) {
             results[tag].forEach((item, index) => {
-                const methodClass = item.method.toLowerCase() === 'get' ? 'method-get' : 'method-post';
+                const methodClass = item.method && item.method.toLowerCase && item.method.toLowerCase() === 'get' ? 'method-get' : 'method-post';
                 const requestItem = document.createElement('div');
                 requestItem.className = 'request-item';
+                // 安全に値を埋め込む（外部データは escapeHtml を通す）
+                const methodText = escapeHtml(item.method);
+                const urlText = escapeHtml(item.url);
+                const statusText = escapeHtml(item.status);
+                const timestampText = escapeHtml(item.timestamp);
+
+                let paramsHtml = '';
+                if (item.foundParams && item.foundParams.length > 0) {
+                    paramsHtml = `<div class="request-params"><strong>パラメータ:</strong> ` +
+                        item.foundParams.map(p => `<span class="param-name">${escapeHtml(p.name)}</span>=${escapeHtml(p.value)}`).join(', ') +
+                        `</div>`;
+                }
+
                 requestItem.innerHTML = `
                     <div>
-                        <span class="request-method ${methodClass}">${item.method}</span>
-                        <span class="request-url">${item.url}</span>
+                        <span class="request-method ${methodClass}">${methodText}</span>
+                        <span class="request-url">${urlText}</span>
                     </div>
                     <div class="request-meta">
                         <div class="meta-item">
@@ -296,24 +349,17 @@ function displayResults(results, tags) {
                                 <rect x="3" y="11" width="18" height="10" rx="2" ry="2"></rect>
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                             </svg>
-                            ステータス: ${item.status}
+                            ステータス: ${statusText}
                         </div>
                         <div class="meta-item">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <polyline points="12 6 12 12 16 14"></polyline>
                             </svg>
-                            ${item.timestamp}
+                            ${timestampText}
                         </div>
                     </div>
-                    ${item.foundParams.length > 0 ? 
-                        `<div class="request-params">
-                            <strong>パラメータ:</strong> ${
-                            item.foundParams.map(p => 
-                                `<span class="param-name">${p.name}</span>=${p.value}`
-                            ).join(', ')
-                        }</div>` : ''
-                    }
+                    ${paramsHtml}
                 `;
                 details.appendChild(requestItem);
             });
@@ -383,15 +429,21 @@ function exportToCSV() {
     });
 
     // CSV文字列を生成
+    // CSV挿入時のExcelインジェクション対策
+    const sanitizeCsvCell = (value) => {
+        const cellStr = String(value === null || typeof value === 'undefined' ? '' : value);
+        // 先頭文字が = + - @ の場合はシングルクォートで無害化
+        if (/^[=+\-@]/.test(cellStr)) {
+            return `'${cellStr.replace(/"/g, '""')}`;
+        }
+        if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
+            return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+    };
+
     const csvContent = rows.map(row => 
-        row.map(cell => {
-            // セル内にカンマ、改行、ダブルクォートが含まれる場合の処理
-            const cellStr = String(cell);
-            if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
-                return `"${cellStr.replace(/"/g, '""')}"`;
-            }
-            return cellStr;
-        }).join(',')
+        row.map(cell => sanitizeCsvCell(cell)).join(',')
     ).join('\n');
 
     // BOMを追加（Excelで開いた時の文字化け対策）
@@ -423,3 +475,20 @@ function exportToCSV() {
     // メモリ解放
     URL.revokeObjectURL(url);
 }
+
+// 初期イベントリスナのセットアップ（inline handlers を置換）
+document.addEventListener('DOMContentLoaded', () => {
+    const addBtn = document.getElementById('addTagBtn');
+    if (addBtn) addBtn.addEventListener('click', addTagInput);
+
+    const checkBtn = document.getElementById('checkBtn');
+    if (checkBtn) checkBtn.addEventListener('click', checkTags);
+
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
+
+    // 既存の削除ボタンにリスナを追加
+    document.querySelectorAll('.remove-tag-btn').forEach(btn => {
+        btn.addEventListener('click', () => removeTagInput(btn));
+    });
+});

@@ -34,18 +34,18 @@
             <div class="tag-inputs" id="tagInputs">
                 <div class="tag-input-row">
                     <input type="text" class="tag-input" placeholder="例: gtag, fbq, _ga, GTM-XXXXX (スペースでAND検索)">
-                    <button class="btn btn-danger" onclick="removeTagInput(this)">削除</button>
+                    <button class="btn btn-danger remove-tag-btn" type="button">削除</button>
                 </div>
             </div>
             <div class="action-buttons">
-                <button class="btn btn-secondary" onclick="addTagInput()">
+                <button id="addTagBtn" class="btn btn-secondary" type="button">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                     タグを追加
                 </button>
-                <button class="btn btn-primary" onclick="checkTags()">
+                <button id="checkBtn" class="btn btn-primary" type="button">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"></circle>
                         <path d="m21 21-4.35-4.35"></path>
@@ -59,7 +59,7 @@
             <h2 class="section-title">チェック結果</h2>
             <div class="summary" id="summary"></div>
             <div class="export-section">
-                <button class="btn btn-success" onclick="exportToCSV()">
+                <button id="exportBtn" class="btn btn-success" type="button">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
